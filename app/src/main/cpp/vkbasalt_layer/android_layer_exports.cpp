@@ -12,10 +12,23 @@
 
 #define VKBASALT_ANDROID_EXPORT extern "C" __attribute__((visibility("default")))
 
+// Upstream vkBasalt declares these without VKAPI_ATTR. On 32-bit ARM VKAPI_ATTR is a calling convention attribute
+// (pcs "aapcs-vfp") that is part of the PFN_vk* function pointer types, so the exported entry points below are thin
+// wrappers carrying the right attribute (the arguments are pointers only, so both conventions are identical).
 extern "C"
 {
-    __attribute__((visibility("default"))) PFN_vkVoidFunction VKAPI_CALL vkBasalt_GetDeviceProcAddr(VkDevice device, const char* pName);
-    __attribute__((visibility("default"))) PFN_vkVoidFunction VKAPI_CALL vkBasalt_GetInstanceProcAddr(VkInstance instance, const char* pName);
+    PFN_vkVoidFunction vkBasalt_GetDeviceProcAddr(VkDevice device, const char* pName);
+    PFN_vkVoidFunction vkBasalt_GetInstanceProcAddr(VkInstance instance, const char* pName);
+}
+
+static VKAPI_ATTR PFN_vkVoidFunction VKAPI_CALL basaltGetInstanceProcAddr(VkInstance instance, const char* pName)
+{
+    return vkBasalt_GetInstanceProcAddr(instance, pName);
+}
+
+static VKAPI_ATTR PFN_vkVoidFunction VKAPI_CALL basaltGetDeviceProcAddr(VkDevice device, const char* pName)
+{
+    return vkBasalt_GetDeviceProcAddr(device, pName);
 }
 
 VKBASALT_ANDROID_EXPORT VKAPI_ATTR VkResult VKAPI_CALL vkNegotiateLoaderLayerInterfaceVersion(VkNegotiateLayerInterface* pVersionStruct)
@@ -28,8 +41,8 @@ VKBASALT_ANDROID_EXPORT VKAPI_ATTR VkResult VKAPI_CALL vkNegotiateLoaderLayerInt
 
     if (pVersionStruct->loaderLayerInterfaceVersion >= 2)
     {
-        pVersionStruct->pfnGetInstanceProcAddr       = vkBasalt_GetInstanceProcAddr;
-        pVersionStruct->pfnGetDeviceProcAddr         = vkBasalt_GetDeviceProcAddr;
+        pVersionStruct->pfnGetInstanceProcAddr       = basaltGetInstanceProcAddr;
+        pVersionStruct->pfnGetDeviceProcAddr         = basaltGetDeviceProcAddr;
         pVersionStruct->pfnGetPhysicalDeviceProcAddr = nullptr;
     }
     return VK_SUCCESS;
@@ -37,23 +50,23 @@ VKBASALT_ANDROID_EXPORT VKAPI_ATTR VkResult VKAPI_CALL vkNegotiateLoaderLayerInt
 
 VKBASALT_ANDROID_EXPORT VKAPI_ATTR PFN_vkVoidFunction VKAPI_CALL VK_LAYER_VKBASALT_post_processingGetInstanceProcAddr(VkInstance instance, const char* pName)
 {
-    return vkBasalt_GetInstanceProcAddr(instance, pName);
+    return basaltGetInstanceProcAddr(instance, pName);
 }
 
 VKBASALT_ANDROID_EXPORT VKAPI_ATTR PFN_vkVoidFunction VKAPI_CALL VK_LAYER_VKBASALT_post_processingGetDeviceProcAddr(VkDevice device, const char* pName)
 {
-    return vkBasalt_GetDeviceProcAddr(device, pName);
+    return basaltGetDeviceProcAddr(device, pName);
 }
 
 VKBASALT_ANDROID_EXPORT VKAPI_ATTR VkResult VKAPI_CALL vkEnumerateInstanceLayerProperties(uint32_t* pPropertyCount, VkLayerProperties* pProperties)
 {
-    auto fn = reinterpret_cast<PFN_vkEnumerateInstanceLayerProperties>(vkBasalt_GetInstanceProcAddr(nullptr, "vkEnumerateInstanceLayerProperties"));
+    auto fn = reinterpret_cast<PFN_vkEnumerateInstanceLayerProperties>(basaltGetInstanceProcAddr(nullptr, "vkEnumerateInstanceLayerProperties"));
     return fn ? fn(pPropertyCount, pProperties) : VK_ERROR_INITIALIZATION_FAILED;
 }
 
 VKBASALT_ANDROID_EXPORT VKAPI_ATTR VkResult VKAPI_CALL vkEnumerateInstanceExtensionProperties(const char* pLayerName, uint32_t* pPropertyCount, VkExtensionProperties* pProperties)
 {
-    auto fn = reinterpret_cast<PFN_vkEnumerateInstanceExtensionProperties>(vkBasalt_GetInstanceProcAddr(nullptr, "vkEnumerateInstanceExtensionProperties"));
+    auto fn = reinterpret_cast<PFN_vkEnumerateInstanceExtensionProperties>(basaltGetInstanceProcAddr(nullptr, "vkEnumerateInstanceExtensionProperties"));
     return fn ? fn(pLayerName, pPropertyCount, pProperties) : VK_ERROR_INITIALIZATION_FAILED;
 }
 
