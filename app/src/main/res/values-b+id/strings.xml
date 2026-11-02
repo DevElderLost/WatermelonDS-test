@@ -629,6 +629,8 @@
     <string name="video_vkbasalt_category">vkBasalt / ReShade</string>
     <string name="video_vkbasalt_enabled">Aktifkan vkBasalt</string>
     <string name="video_vkbasalt_enabled_summary">Memakai layer Vulkan vkBasalt asli (shader ReShade .fx, CAS, SMAA, FXAA…). Hanya renderer Vulkan. Berlaku saat game dimulai berikutnya.</string>
+    <string name="video_vkbasalt_top_screen_only">Hanya layar atas</string>
+    <string name="video_vkbasalt_top_screen_only_summary">Terapkan efek hanya pada area layar atas dari layout saat ini. Layar bawah dan latar tidak terpengaruh</string>
     <string name="video_vkbasalt_import">Impor paket shader (.zip)</string>
     <string name="video_vkbasalt_import_summary">Pilih .zip shader ReShade atau vkBasalt</string>
     <string name="video_vkbasalt_import_summary_installed">Paket sudah terpasang. Pilih .zip lain untuk menggantinya</string>

@@ -10,6 +10,7 @@
 #include "MelonDS.h"
 #include "GPU3D_Vulkan.h"
 #include "renderer/VulkanSurfacePresenter.h"
+#include "renderer/VkBasaltRegion.h"
 #include "OpenGLContext.h"
 #include "Platform.h"
 #include "renderer/FrameQueue.h"
@@ -557,8 +558,11 @@ Java_me_magnum_melonds_MelonDSAndroidInterface_setVkBasaltConfigNative(
     JNIEnv* env,
     jobject thiz,
     jstring configPath,
-    jstring logPath)
+    jstring logPath,
+    jboolean topScreenOnly)
 {
+    MelonDSAndroid::setVkBasaltTopScreenOnly(configPath != nullptr && topScreenOnly == JNI_TRUE);
+
     if (configPath == nullptr)
     {
         unsetenv("VKBASALT_CONFIG_FILE");

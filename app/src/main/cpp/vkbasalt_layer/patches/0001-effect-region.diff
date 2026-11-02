@@ -1,0 +1,279 @@
+diff --git a/src/basalt.cpp b/src/basalt.cpp
+index 8061050..6a0bde8 100644
+--- a/src/basalt.cpp
++++ b/src/basalt.cpp
+@@ -61,6 +61,59 @@ namespace vkBasalt
+     std::unordered_map<VkSwapchainKHR, std::shared_ptr<LogicalSwapchain>> swapchainMap;
+ 
+     std::mutex globalLock;
++
++    // ---- melonDS: apply the effects to a part of the screen only --------------------------------------------------
++    // The frontend reports, per swapchain extent, the rectangle (in swapchain pixels) that should receive the effects.
++    struct EffectRegion
++    {
++        uint32_t extentWidth, extentHeight;
++        int32_t  x, y;
++        uint32_t width, height;
++    };
++    std::vector<EffectRegion> effectRegions; // guarded by globalLock
++
++    static bool effectRegionEnabled()
++    {
++        static const bool enabled = pConfig->getOption<bool>("effectRegion", false);
++        return enabled;
++    }
++
++    static VkRect2D lookupEffectRegion(VkExtent2D extent)
++    {
++        for (const EffectRegion& r : effectRegions)
++        {
++            if (r.extentWidth != extent.width || r.extentHeight != extent.height)
++                continue;
++
++            int64_t x0 = std::max<int64_t>(0, r.x);
++            int64_t y0 = std::max<int64_t>(0, r.y);
++            int64_t x1 = std::min<int64_t>(extent.width, static_cast<int64_t>(r.x) + r.width);
++            int64_t y1 = std::min<int64_t>(extent.height, static_cast<int64_t>(r.y) + r.height);
++            if (x1 <= x0 || y1 <= y0)
++                break;
++
++            return VkRect2D{{static_cast<int32_t>(x0), static_cast<int32_t>(y0)}, {static_cast<uint32_t>(x1 - x0), static_cast<uint32_t>(y1 - y0)}};
++        }
++        return VkRect2D{{0, 0}, {0, 0}}; // whole image
++    }
++
++    void setEffectRegion(uint32_t extentWidth, uint32_t extentHeight, int32_t x, int32_t y, uint32_t width, uint32_t height)
++    {
++        std::lock_guard<std::mutex> l(globalLock);
++        for (auto it = effectRegions.begin(); it != effectRegions.end(); ++it)
++        {
++            if (it->extentWidth == extentWidth && it->extentHeight == extentHeight)
++            {
++                if (width == 0 || height == 0)
++                    effectRegions.erase(it);
++                else
++                    *it = EffectRegion{extentWidth, extentHeight, x, y, width, height};
++                return;
++            }
++        }
++        if (width > 0 && height > 0)
++            effectRegions.push_back(EffectRegion{extentWidth, extentHeight, x, y, width, height});
++    }
+ #ifdef _GCC_
+     using scoped_lock __attribute__((unused)) = std::lock_guard<std::mutex>;
+ #else
+@@ -250,7 +303,7 @@ namespace vkBasalt
+         pLogicalDevice->queue                 = VK_NULL_HANDLE;
+         pLogicalDevice->queueFamilyIndex      = 0;
+         pLogicalDevice->commandPool           = VK_NULL_HANDLE;
+-        pLogicalDevice->supportsMutableFormat = supportsMutableFormat;
++        pLogicalDevice->supportsMutableFormat = supportsMutableFormat && !effectRegionEnabled();
+ 
+         fillDispatchTableDevice(*pDevice, gdpa, &pLogicalDevice->vkd);
+ 
+@@ -481,13 +534,32 @@ namespace vkBasalt
+ 
+         if (!pLogicalDevice->supportsMutableFormat)
+         {
+-            pLogicalSwapchain->effects.push_back(std::shared_ptr<Effect>(new TransferEffect(
++            std::shared_ptr<TransferEffect> finalTransfer(new TransferEffect(
+                 pLogicalDevice,
+                 pLogicalSwapchain->format,
+                 pLogicalSwapchain->imageExtent,
+                 std::vector<VkImage>(pLogicalSwapchain->fakeImages.end() - pLogicalSwapchain->imageCount, pLogicalSwapchain->fakeImages.end()),
+                 pLogicalSwapchain->images,
+-                pConfig.get())));
++                pConfig.get(),
++                effectRegionEnabled()));
++            if (effectRegionEnabled())
++            {
++                pLogicalSwapchain->regionTransfer = finalTransfer;
++                pLogicalSwapchain->appliedRegion  = lookupEffectRegion(pLogicalSwapchain->imageExtent);
++                finalTransfer->setRegion(pLogicalSwapchain->appliedRegion.offset, pLogicalSwapchain->appliedRegion.extent);
++
++                // Copy the untouched frame to the swapchain first; the final transfer only replaces the region
++                pLogicalSwapchain->effects.insert(pLogicalSwapchain->effects.begin(),
++                                                  std::shared_ptr<Effect>(new TransferEffect(
++                                                      pLogicalDevice,
++                                                      pLogicalSwapchain->format,
++                                                      pLogicalSwapchain->imageExtent,
++                                                      std::vector<VkImage>(pLogicalSwapchain->fakeImages.begin(),
++                                                                           pLogicalSwapchain->fakeImages.begin() + pLogicalSwapchain->imageCount),
++                                                      pLogicalSwapchain->images,
++                                                      pConfig.get())));
++            }
++            pLogicalSwapchain->effects.push_back(finalTransfer);
+         }
+ 
+         VkImageView depthImageView = pLogicalDevice->depthImageViews.size() ? pLogicalDevice->depthImageViews[0] : VK_NULL_HANDLE;
+@@ -540,6 +612,39 @@ namespace vkBasalt
+         return *pCount < pLogicalSwapchain->imageCount ? VK_INCOMPLETE : VK_SUCCESS;
+     }
+ 
++    // melonDS: re-record the effect command buffers when the region changed (layout/rotation change)
++    static void refreshEffectRegion(LogicalDevice* pLogicalDevice, LogicalSwapchain* pLogicalSwapchain)
++    {
++        if (!pLogicalSwapchain->regionTransfer)
++            return;
++
++        VkRect2D wanted = lookupEffectRegion(pLogicalSwapchain->imageExtent);
++        VkRect2D& applied = pLogicalSwapchain->appliedRegion;
++        if (wanted.offset.x == applied.offset.x && wanted.offset.y == applied.offset.y && wanted.extent.width == applied.extent.width
++            && wanted.extent.height == applied.extent.height)
++            return;
++
++        applied = wanted;
++        pLogicalSwapchain->regionTransfer->setRegion(wanted.offset, wanted.extent);
++
++        // the old command buffers may still be executing
++        pLogicalDevice->vkd.QueueWaitIdle(pLogicalDevice->queue);
++
++        VkImageView depthImageView = pLogicalDevice->depthImageViews.size() ? pLogicalDevice->depthImageViews[0] : VK_NULL_HANDLE;
++        VkImage     depthImage     = pLogicalDevice->depthImageViews.size() ? pLogicalDevice->depthImages[0] : VK_NULL_HANDLE;
++        VkFormat    depthFormat    = pLogicalDevice->depthImageViews.size() ? pLogicalDevice->depthFormats[0] : VK_FORMAT_UNDEFINED;
++
++        pLogicalDevice->vkd.FreeCommandBuffers(pLogicalDevice->device,
++                                               pLogicalDevice->commandPool,
++                                               pLogicalSwapchain->commandBuffersEffect.size(),
++                                               pLogicalSwapchain->commandBuffersEffect.data());
++        pLogicalSwapchain->commandBuffersEffect.clear();
++        pLogicalSwapchain->commandBuffersEffect = allocateCommandBuffer(pLogicalDevice, pLogicalSwapchain->imageCount);
++        writeCommandBuffers(
++            pLogicalDevice, pLogicalSwapchain->effects, depthImage, depthImageView, depthFormat, pLogicalSwapchain->commandBuffersEffect);
++        Logger::debug("effect region changed, re-recorded command buffers");
++    }
++
+     VKAPI_ATTR VkResult VKAPI_CALL vkBasalt_QueuePresentKHR(VkQueue queue, const VkPresentInfoKHR* pPresentInfo)
+     {
+         scoped_lock l(globalLock);
+@@ -575,6 +680,8 @@ namespace vkBasalt
+             VkSwapchainKHR    swapchain         = (*pPresentInfo).pSwapchains[i];
+             LogicalSwapchain* pLogicalSwapchain = swapchainMap[swapchain].get();
+ 
++            refreshEffectRegion(pLogicalDevice, pLogicalSwapchain);
++
+             for (auto& effect : pLogicalSwapchain->effects)
+             {
+                 effect->updateEffect();
+@@ -838,6 +945,14 @@ extern "C"
+     VK_BASALT_EXPORT PFN_vkVoidFunction VKAPI_CALL vkBasalt_GetDeviceProcAddr(VkDevice device, const char* pName);
+     VK_BASALT_EXPORT PFN_vkVoidFunction VKAPI_CALL vkBasalt_GetInstanceProcAddr(VkInstance instance, const char* pName);
+ 
++    // melonDS: restrict the effects to a rectangle (swapchain pixels) of the swapchain with this extent.
++    // width/height 0 removes the restriction. Plain C ABI, resolved by the frontend with dlsym.
++    VK_BASALT_EXPORT void vkBasalt_SetEffectRegion(
++        uint32_t extentWidth, uint32_t extentHeight, int32_t x, int32_t y, uint32_t width, uint32_t height)
++    {
++        vkBasalt::setEffectRegion(extentWidth, extentHeight, x, y, width, height);
++    }
++
+ #define GETPROCADDR(func) \
+     if (!std::strcmp(pName, "vk" #func)) \
+         return (PFN_vkVoidFunction) &vkBasalt::vkBasalt_##func;
+diff --git a/src/effect_transfer.cpp b/src/effect_transfer.cpp
+index 709178f..1d7df29 100644
+--- a/src/effect_transfer.cpp
++++ b/src/effect_transfer.cpp
+@@ -7,8 +7,10 @@ namespace vkBasalt
+                                    VkExtent2D           imageExtent,
+                                    std::vector<VkImage> inputImages,
+                                    std::vector<VkImage> outputImages,
+-                                   Config*              pConfig)
++                                   Config*              pConfig,
++                                   bool                 preserveOutput)
+     {
++        this->preserveOutput = preserveOutput;
+         this->pLogicalDevice = pLogicalDevice;
+         this->format         = format;
+         this->imageExtent    = imageExtent;
+@@ -17,18 +19,25 @@ namespace vkBasalt
+         this->pConfig        = pConfig;
+     }
+ 
++    void TransferEffect::setRegion(VkOffset2D offset, VkExtent2D extent)
++    {
++        regionOffset = offset;
++        regionExtent = extent;
++    }
++
+     void TransferEffect::applyEffect(uint32_t imageIndex, VkCommandBuffer commandBuffer)
+     {
+         VkImageCopy imageCopy;
+         imageCopy.srcSubresource            = {};
+         imageCopy.srcSubresource.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
+         imageCopy.srcSubresource.layerCount = 1;
+-        imageCopy.srcOffset                 = {};
++        const bool hasRegion                = regionExtent.width > 0 && regionExtent.height > 0;
++        imageCopy.srcOffset                 = {hasRegion ? regionOffset.x : 0, hasRegion ? regionOffset.y : 0, 0};
+         imageCopy.dstSubresource            = {};
+         imageCopy.dstSubresource.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
+         imageCopy.dstSubresource.layerCount = 1;
+-        imageCopy.dstOffset                 = {};
+-        imageCopy.extent                    = {imageExtent.width, imageExtent.height, 1};
++        imageCopy.dstOffset                 = imageCopy.srcOffset;
++        imageCopy.extent                    = {hasRegion ? regionExtent.width : imageExtent.width, hasRegion ? regionExtent.height : imageExtent.height, 1};
+ 
+         VkImageMemoryBarrier memoryBarrier;
+         memoryBarrier.sType               = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER;
+@@ -51,7 +60,8 @@ namespace vkBasalt
+             commandBuffer, VK_PIPELINE_STAGE_BOTTOM_OF_PIPE_BIT, VK_PIPELINE_STAGE_TRANSFER_BIT, 0, 0, nullptr, 0, nullptr, 1, &memoryBarrier);
+ 
+         memoryBarrier.image         = outputImages[imageIndex];
+-        memoryBarrier.oldLayout     = VK_IMAGE_LAYOUT_UNDEFINED;
++        // preserveOutput: the output already holds the untouched frame (copied earlier in the chain), so do not discard it
++        memoryBarrier.oldLayout     = preserveOutput ? VK_IMAGE_LAYOUT_PRESENT_SRC_KHR : VK_IMAGE_LAYOUT_UNDEFINED;
+         memoryBarrier.newLayout     = VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL;
+         memoryBarrier.dstAccessMask = VK_ACCESS_TRANSFER_WRITE_BIT;
+         pLogicalDevice->vkd.CmdPipelineBarrier(
+diff --git a/src/effect_transfer.hpp b/src/effect_transfer.hpp
+index 7e7eda0..f1955a8 100644
+--- a/src/effect_transfer.hpp
++++ b/src/effect_transfer.hpp
+@@ -25,10 +25,14 @@ namespace vkBasalt
+                        VkExtent2D           imageExtent,
+                        std::vector<VkImage> inputImages,
+                        std::vector<VkImage> outputImages,
+-                       Config*              pConfig);
++                       Config*              pConfig,
++                       bool                 preserveOutput = false);
+         void virtual applyEffect(uint32_t imageIndex, VkCommandBuffer commandBuffer) override;
+         virtual ~TransferEffect();
+ 
++        // melonDS: copy only this part of the image (the output keeps its content elsewhere). A 0x0 extent means the whole image.
++        void setRegion(VkOffset2D offset, VkExtent2D extent);
++
+     private:
+         LogicalDevice*       pLogicalDevice;
+         std::vector<VkImage> inputImages;
+@@ -36,6 +40,9 @@ namespace vkBasalt
+         VkExtent2D           imageExtent;
+         VkFormat             format;
+         Config*              pConfig;
++        bool                 preserveOutput = false;
++        VkOffset2D           regionOffset{0, 0};
++        VkExtent2D           regionExtent{0, 0};
+     };
+ } // namespace vkBasalt
+ #endif // EFFECT_TRANSFER_HPP_INCLUDED
+diff --git a/src/logical_swapchain.hpp b/src/logical_swapchain.hpp
+index 7a44fd5..4f14c03 100644
+--- a/src/logical_swapchain.hpp
++++ b/src/logical_swapchain.hpp
+@@ -8,6 +8,7 @@
+ #include <memory>
+ 
+ #include "effect.hpp"
++#include "effect_transfer.hpp"
+ 
+ #include "vulkan_include.hpp"
+ 
+@@ -31,6 +32,9 @@ namespace vkBasalt
+         std::vector<std::shared_ptr<Effect>> effects;
+         std::shared_ptr<Effect>              defaultTransfer;
+         VkDeviceMemory                       fakeImageMemory;
++        // melonDS: set when the "effectRegion" option is on. The final transfer only copies the region.
++        std::shared_ptr<TransferEffect>      regionTransfer;
++        VkRect2D                             appliedRegion{{0, 0}, {0, 0}};
+ 
+         void destroy();
+     };

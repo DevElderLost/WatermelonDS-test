@@ -1194,6 +1194,8 @@
     <string name="video_vkbasalt_category">vkBasalt / ReShade</string>
     <string name="video_vkbasalt_enabled">Enable vkBasalt</string>
     <string name="video_vkbasalt_enabled_summary">Applies the real vkBasalt Vulkan layer (ReShade .fx shaders, CAS, SMAA, FXAA…). Vulkan renderer only. Takes effect the next time a game starts.</string>
+    <string name="video_vkbasalt_top_screen_only">Top screen only</string>
+    <string name="video_vkbasalt_top_screen_only_summary">Apply the effects only to the top screen area of the current layout. The bottom screen and the background stay untouched</string>
     <string name="video_vkbasalt_import">Import shader pack (.zip)</string>
     <string name="video_vkbasalt_import_summary">Select a ReShade shaders or vkBasalt .zip</string>
     <string name="video_vkbasalt_import_summary_installed">A pack is installed. Select another .zip to replace it</string>

@@ -178,6 +178,14 @@
                 app:iconSpaceReserved="false"
                 android:defaultValue="false" />
 
+        <SwitchPreference
+                android:key="video_vkbasalt_top_screen_only"
+                android:title="@string/video_vkbasalt_top_screen_only"
+                android:summary="@string/video_vkbasalt_top_screen_only_summary"
+                android:dependency="video_vkbasalt_enabled"
+                app:iconSpaceReserved="false"
+                android:defaultValue="true" />
+
         <Preference
                 android:key="video_vkbasalt_import"
                 android:title="@string/video_vkbasalt_import"

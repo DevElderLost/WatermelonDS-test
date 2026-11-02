@@ -18,6 +18,7 @@ class VkBasaltManager(context: Context) {
     companion object {
         const val KEY_ENABLED = "video_vkbasalt_enabled"
         const val KEY_EFFECTS = "video_vkbasalt_effects"
+        const val KEY_TOP_SCREEN_ONLY = "video_vkbasalt_top_screen_only"
         private const val EFFECT_SEPARATOR = "\n"
     }
 
@@ -31,6 +32,9 @@ class VkBasaltManager(context: Context) {
     private val logFile = File(appContext.cacheDir, "vkbasalt.log")
 
     fun isEnabled(): Boolean = preferences.getBoolean(KEY_ENABLED, false)
+
+    /** Apply the effects only to the top screen of the layout (not to the bottom screen or the background). */
+    fun isTopScreenOnly(): Boolean = preferences.getBoolean(KEY_TOP_SCREEN_ONLY, true)
 
     fun loadPack(): VkBasaltPack? {
         return if (packDir.isDirectory) VkBasaltZipImporter.scan(packDir) else null
@@ -95,9 +99,10 @@ class VkBasaltManager(context: Context) {
 
         val pack = loadPack()
         val selected = selectedEffectIds()
+        val topScreenOnly = isTopScreenOnly()
         val configText = when {
-            selected.isNotEmpty() -> VkBasaltConfigWriter.build(pack, selected)
-            pack?.userConf != null -> VkBasaltConfigWriter.rewriteUserConf(pack.userConf.readText(), pack, pack.userConf.parentFile ?: pack.root)
+            selected.isNotEmpty() -> VkBasaltConfigWriter.build(pack, selected, topScreenOnly = topScreenOnly)
+            pack?.userConf != null -> VkBasaltConfigWriter.rewriteUserConf(pack.userConf.readText(), pack, pack.userConf.parentFile ?: pack.root, topScreenOnly)
             else -> null
         }
 
@@ -110,7 +115,7 @@ class VkBasaltManager(context: Context) {
         runCatching {
             baseDir.mkdirs()
             configFile.writeText(configText)
-            MelonDSAndroidInterface.setVkBasaltConfig(configFile.absolutePath, logFile.absolutePath)
+            MelonDSAndroidInterface.setVkBasaltConfig(configFile.absolutePath, logFile.absolutePath, topScreenOnly)
         }.onFailure {
             MelonDSAndroidInterface.setVkBasaltConfig(null, null)
         }

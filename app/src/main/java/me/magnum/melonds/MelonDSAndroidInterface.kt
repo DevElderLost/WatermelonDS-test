@@ -32,7 +32,7 @@ object MelonDSAndroidInterface {
         disableTimelineSemaphores: Boolean,
         disableDynamicTextureIndexing: Boolean,
     )
-    private external fun setVkBasaltConfigNative(configPath: String?, logPath: String?)
+    private external fun setVkBasaltConfigNative(configPath: String?, logPath: String?, topScreenOnly: Boolean)
     external fun cleanup()
 
     fun setup(uriFileHandler: UriFileHandler, vulkanDriverConfiguration: VulkanDriverConfiguration) {
@@ -84,11 +84,12 @@ object MelonDSAndroidInterface {
 
     /**
      * Enables (or disables, when [configPath] is null) the real vkBasalt Vulkan layer for the next Vulkan context.
-     * [configPath] is the vkBasalt.conf to use and [logPath] an optional vkBasalt log file.
+     * [configPath] is the vkBasalt.conf to use, [logPath] an optional vkBasalt log file and [topScreenOnly] restricts the
+     * effects to the top screen of the layout.
      */
-    fun setVkBasaltConfig(configPath: String?, logPath: String?) {
+    fun setVkBasaltConfig(configPath: String?, logPath: String?, topScreenOnly: Boolean = false) {
         runCatching {
-            setVkBasaltConfigNative(configPath, logPath)
+            setVkBasaltConfigNative(configPath, logPath, topScreenOnly)
         }
     }
 }

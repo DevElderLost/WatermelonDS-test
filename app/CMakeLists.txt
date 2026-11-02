@@ -199,6 +199,7 @@ add_library(
         "${ANDROID_CPP_DIR}/renderer/OpenGlRetroArchFilterChain.cpp"
         "${ANDROID_CPP_DIR}/renderer/VulkanRetroArchFilterChain.cpp"
         "${ANDROID_CPP_DIR}/renderer/VulkanSurfacePresenter.cpp"
+        "${ANDROID_CPP_DIR}/renderer/VkBasaltRegion.cpp"
         "${ANDROID_CPP_DIR}/retroachievements/RetroAchievementsManager.cpp"
 )
 

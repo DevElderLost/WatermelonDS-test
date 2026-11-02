@@ -4,6 +4,7 @@
 #include <algorithm>
 #include <array>
 #include <atomic>
+#include <cmath>
 #include <cstring>
 #include <mutex>
 #include <vector>
@@ -12,6 +13,7 @@
 #include "VulkanContext.h"
 #include "VulkanDispatch.h"
 #include "VulkanOutput.h"
+#include "VkBasaltRegion.h"
 #include "VulkanSurfacePresenterFragmentShaderData.h"
 #include "VulkanSurfacePresenterVertexShaderData.h"
 #include "renderer/RetroArchOutputScale.h"
@@ -5230,6 +5232,79 @@ bool VulkanSurfacePresenter::updateVertexBuffer(
             break;
         default:
             break;
+    }
+
+    if (MelonDSAndroid::isVkBasaltTopScreenOnly())
+    {
+        // Tell the vkBasalt layer which part of the swapchain is the top screen, so the effects only touch that area.
+        // Uses the same logical -> NDC -> pre-rotation math as the vertices above, ending in swapchain pixels.
+        const auto usableRect = [](const VulkanPresenterRect& rect) {
+            return rect.enabled && rect.width > 0 && rect.height > 0;
+        };
+        const VulkanPresenterRect& topRect = usableRect(surfaceState.config.topScreen)
+            ? surfaceState.config.topScreen
+            : surfaceState.config.hybridTopScreen;
+        if (usableRect(topRect) && surfaceState.extent.width > 0 && surfaceState.extent.height > 0)
+        {
+            const float xs[2] = {screenXToNdc(topRect.x), screenXToNdc(topRect.x + topRect.width)};
+            const float ys[2] = {screenYToNdc(topRect.y), screenYToNdc(topRect.y + topRect.height)};
+            float minX = 1e9f, minY = 1e9f, maxX = -1e9f, maxY = -1e9f;
+            for (const float cornerX : xs)
+            {
+                for (const float cornerY : ys)
+                {
+                    float nx = cornerX;
+                    float ny = cornerY;
+                    switch (surfaceState.preTransform)
+                    {
+                        case VK_SURFACE_TRANSFORM_ROTATE_90_BIT_KHR:
+                        {
+                            const float oldX = nx;
+                            nx = ny;
+                            ny = -oldX;
+                            break;
+                        }
+                        case VK_SURFACE_TRANSFORM_ROTATE_180_BIT_KHR:
+                            nx = -nx;
+                            ny = -ny;
+                            break;
+                        case VK_SURFACE_TRANSFORM_ROTATE_270_BIT_KHR:
+                        {
+                            const float oldX = nx;
+                            nx = -ny;
+                            ny = oldX;
+                            break;
+                        }
+                        default:
+                            break;
+                    }
+
+                    // the viewport is flipped (negative height): NDC y +1 is the top row of the swapchain image
+                    const float px = (nx + 1.0f) * 0.5f * static_cast<float>(surfaceState.extent.width);
+                    const float py = (1.0f - ny) * 0.5f * static_cast<float>(surfaceState.extent.height);
+                    minX = std::min(minX, px);
+                    minY = std::min(minY, py);
+                    maxX = std::max(maxX, px);
+                    maxY = std::max(maxY, py);
+                }
+            }
+
+            const int regionX = static_cast<int>(std::floor(minX + 0.01f));
+            const int regionY = static_cast<int>(std::floor(minY + 0.01f));
+            const int regionRight = static_cast<int>(std::ceil(maxX - 0.01f));
+            const int regionBottom = static_cast<int>(std::ceil(maxY - 0.01f));
+            MelonDSAndroid::publishVkBasaltRegion(
+                surfaceState.extent.width,
+                surfaceState.extent.height,
+                regionX,
+                regionY,
+                static_cast<u32>(std::max(0, regionRight - regionX)),
+                static_cast<u32>(std::max(0, regionBottom - regionY)));
+        }
+        else
+        {
+            MelonDSAndroid::publishVkBasaltRegion(surfaceState.extent.width, surfaceState.extent.height, 0, 0, 0, 0);
+        }
     }
 
     if (!vertices.empty())

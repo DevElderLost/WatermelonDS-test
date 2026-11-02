@@ -19,7 +19,32 @@ if (NOT EXISTS "${VKBASALT_SRC_ROOT}/src/basalt.cpp")
     return()
 endif()
 
-set(VKBASALT_SRC "${VKBASALT_SRC_ROOT}/src")
+# ---- patched copy of the vkBasalt sources: patches/*.diff is applied to a copy in the build directory so the
+# submodule stays pristine. 0001-effect-region.diff adds the "effectRegion" option (effects only inside a rectangle,
+# used to restrict the effects to the top screen) and the exported vkBasalt_SetEffectRegion().
+set(VKBASALT_PATCHED_ROOT "${CMAKE_CURRENT_BINARY_DIR}/vkbasalt_patched")
+file(REMOVE_RECURSE "${VKBASALT_PATCHED_ROOT}")
+file(COPY "${VKBASALT_SRC_ROOT}/src" DESTINATION "${VKBASALT_PATCHED_ROOT}")
+file(GLOB VKBASALT_PATCHES "${CMAKE_CURRENT_SOURCE_DIR}/patches/*.diff")
+list(SORT VKBASALT_PATCHES)
+find_program(VKBASALT_GIT NAMES git)
+find_program(VKBASALT_PATCH_TOOL NAMES patch)
+foreach (vkbasalt_patch ${VKBASALT_PATCHES})
+    if (VKBASALT_GIT)
+        execute_process(COMMAND "${VKBASALT_GIT}" apply --whitespace=nowarn "${vkbasalt_patch}"
+                WORKING_DIRECTORY "${VKBASALT_PATCHED_ROOT}" RESULT_VARIABLE _patch_result ERROR_VARIABLE _patch_error)
+    elseif (VKBASALT_PATCH_TOOL)
+        execute_process(COMMAND "${VKBASALT_PATCH_TOOL}" -p1 -i "${vkbasalt_patch}"
+                WORKING_DIRECTORY "${VKBASALT_PATCHED_ROOT}" RESULT_VARIABLE _patch_result ERROR_VARIABLE _patch_error)
+    else()
+        message(FATAL_ERROR "git or patch is needed to apply ${vkbasalt_patch}")
+    endif()
+    if (NOT _patch_result EQUAL 0)
+        message(FATAL_ERROR "Could not apply ${vkbasalt_patch} to vkBasalt (is the submodule at the expected commit?): ${_patch_error}")
+    endif()
+endforeach()
+
+set(VKBASALT_SRC "${VKBASALT_PATCHED_ROOT}/src")
 set(VKBASALT_GEN "${CMAKE_CURRENT_BINARY_DIR}/generated")
 file(MAKE_DIRECTORY "${VKBASALT_GEN}")
 

@@ -146,7 +146,7 @@ object VkBasaltConfigWriter {
     /**
      * Builds a vkBasalt.conf for the chosen effects (in the given order). Unknown ids are skipped.
      */
-    fun build(pack: VkBasaltPack?, selectedIds: List<String>, depthCapture: Boolean = false): String {
+    fun build(pack: VkBasaltPack?, selectedIds: List<String>, depthCapture: Boolean = false, topScreenOnly: Boolean = false): String {
         val byId = (VkBasaltBuiltIns.effects + (pack?.effects ?: emptyList())).associateBy { it.id }
         val chain = selectedIds.mapNotNull { byId[it] }.distinctBy { it.id }
 
@@ -165,6 +165,7 @@ object VkBasaltConfigWriter {
         if (pack?.includeDir != null) sb.append("reshadeIncludePath = ").append(pack.includeDir.absolutePath).append('\n')
         sb.append("depthCapture = ").append(if (depthCapture) "on" else "off").append('\n')
         sb.append("toggleKey = Home\n")
+        if (topScreenOnly) sb.append("effectRegion = true\n")
         return sb.toString()
     }
 
@@ -173,7 +174,7 @@ object VkBasaltConfigWriter {
      * Paths are resolved (in this order): as they are if they exist, relative to the config file, relative to the
      * pack root, and finally by file name anywhere in the pack. Unresolvable values are left untouched.
      */
-    fun rewriteUserConf(text: String, pack: VkBasaltPack, confDir: File): String {
+    fun rewriteUserConf(text: String, pack: VkBasaltPack, confDir: File, topScreenOnly: Boolean = false): String {
         val byName: Map<String, File> by lazy {
             pack.root.walkTopDown().filter { it.isFile }.groupBy { it.name }.mapValues { it.value.first() }
         }
@@ -194,7 +195,7 @@ object VkBasaltConfigWriter {
             return (if (wantDir) dirsByName[leaf] else byName[leaf])?.absolutePath
         }
 
-        return text.lineSequence().joinToString("\n") { line ->
+        val rewritten = text.lineSequence().joinToString("\n") { line ->
             if (line.trimStart().startsWith("#")) return@joinToString line
             val m = KEY_VALUE.matchEntire(line) ?: return@joinToString line
             val key = m.groupValues[1]
@@ -209,5 +210,9 @@ object VkBasaltConfigWriter {
                 else -> line
             }
         }
+
+        // "effectRegion" is controlled by the app setting, not by the zip's config
+        val withoutRegion = rewritten.lineSequence().filterNot { KEY_VALUE.matchEntire(it)?.groupValues?.get(1) == "effectRegion" }.joinToString("\n")
+        return if (topScreenOnly) withoutRegion.trimEnd('\n') + "\neffectRegion = true\n" else withoutRegion
     }
 }
