@@ -18,6 +18,10 @@ jobs:
     # The type of runner that the job will run on
     runs-on: ubuntu-latest
 
+    # Needed to push the nightly-release tag and update the release with GITHUB_TOKEN
+    permissions:
+      contents: write
+
     # Steps represent a sequence of tasks that will be executed as part of the job
     steps:
 
@@ -72,6 +76,16 @@ jobs:
           echo "MELONDS_KEY_PASSWORD=$KS_PASS" >> local.properties
           chmod +x ./gradlew
           ./gradlew :app:regenerateVulkanSpirv :app:assembleGitHubNightlyRelease
+
+      - name: Upload Artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: melonDS-android
+          path: app/build/outputs/apk/gitHubNightly/release/app-gitHub-nightly-release.apk
+
+      # The APK is already built at this point, so keep it downloadable even if tagging/releasing fails
+      - name: Tag nightly release
+        run: |
           git tag -m "Nightly Release" -f -a nightly-release
           git push -f origin refs/tags/nightly-release
 
@@ -99,8 +113,3 @@ jobs:
           artifacts: app/build/outputs/apk/gitHubNightly/release/app-gitHub-nightly-release.apk
           artifactContentType: application/vnd.android.package-archive
 
-      - name: Upload Artifact
-        uses: actions/upload-artifact@v4
-        with:
-          name: melonDS-android
-          path: app/build/outputs/apk/gitHubNightly/release/app-gitHub-nightly-release.apk
