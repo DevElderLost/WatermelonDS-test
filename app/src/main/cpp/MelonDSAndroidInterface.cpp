@@ -2,6 +2,7 @@
 #include <cstring>
 #include <atomic>
 #include <string>
+#include <cstdlib>
 #include <vulkan/vulkan.h>
 #include <vulkan/vulkan_android.h>
 #include "JniEnvHandler.h"
@@ -549,6 +550,44 @@ Java_me_magnum_melonds_MelonDSAndroidInterface_setVulkanCapabilityOverridesNativ
         disableTimelineSemaphores == JNI_TRUE,
         disableDynamicTextureIndexing == JNI_TRUE
     );
+}
+
+JNIEXPORT void JNICALL
+Java_me_magnum_melonds_MelonDSAndroidInterface_setVkBasaltConfigNative(
+    JNIEnv* env,
+    jobject thiz,
+    jstring configPath,
+    jstring logPath)
+{
+    if (configPath == nullptr)
+    {
+        unsetenv("VKBASALT_CONFIG_FILE");
+        unsetenv("VKBASALT_LOG_FILE");
+        melonDS::VulkanContext::SetPostProcessLayerEnabled(false);
+        return;
+    }
+
+    const char* config = env->GetStringUTFChars(configPath, nullptr);
+    if (config != nullptr)
+    {
+        // vkBasalt reads its configuration from this environment variable when the layer is created
+        setenv("VKBASALT_CONFIG_FILE", config, 1);
+        env->ReleaseStringUTFChars(configPath, config);
+    }
+
+    if (logPath != nullptr)
+    {
+        const char* log = env->GetStringUTFChars(logPath, nullptr);
+        if (log != nullptr)
+        {
+            setenv("VKBASALT_LOG_FILE", log, 1);
+            setenv("VKBASALT_LOG_LEVEL", "info", 1);
+            env->ReleaseStringUTFChars(logPath, log);
+        }
+    }
+
+    melonDS::VulkanContext::SetPostProcessLayerEnabled(true);
+    melonDS::Platform::Log(melonDS::Platform::LogLevel::Info, "MelonDSAndroidInterface: vkBasalt layer requested");
 }
 
 JNIEXPORT void JNICALL

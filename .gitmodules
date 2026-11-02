@@ -1,6 +1,6 @@
 [submodule "melonDS-android-lib"]
 	path = melonDS-android-lib
-	url = https://github.com/SapphireRhodonite/melonDS-android-lib.git
+	url = https://github.com/DevElderLost/melonDS-android-lib-test.git
 	branch = GBARumble_PR
 [submodule "app/src/main/cpp/oboe"]
 	path = app/src/main/cpp/oboe
@@ -14,3 +14,6 @@
 [submodule "app/src/main/cpp/zstd"]
 	path = app/src/main/cpp/zstd
 	url = https://github.com/facebook/zstd.git
+[submodule "app/src/main/cpp/vkBasalt"]
+	path = app/src/main/cpp/vkBasalt
+	url = https://github.com/DadSchoorse/vkBasalt.git

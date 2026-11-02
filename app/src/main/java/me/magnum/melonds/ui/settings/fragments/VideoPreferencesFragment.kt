@@ -128,6 +128,12 @@ class VideoPreferencesFragment : BasePreferenceFragment(), PreferenceFragmentTit
         handleVulkanDriverImport(uri)
     }
 
+    private var vkBasaltController: VkBasaltSettingsController? = null
+    private val vkBasaltImportLauncher = registerForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
+        uri ?: return@registerForActivityResult
+        vkBasaltController?.onZipPicked(uri)
+    }
+
     override fun onCreatePreferences(savedInstanceState: Bundle?, rootKey: String?) {
         setPreferencesFromResource(R.xml.pref_video, rootKey)
 
@@ -142,6 +148,9 @@ class VideoPreferencesFragment : BasePreferenceFragment(), PreferenceFragmentTit
         }
 
         adrenoVulkanDriverManager = AdrenoVulkanDriverManager(requireContext(), settingsRepository)
+        vkBasaltController = VkBasaltSettingsController(this) {
+            vkBasaltImportLauncher.launch(arrayOf("application/zip", "application/x-zip-compressed", "application/octet-stream"))
+        }.also { it.setup() }
 
         val launchedInGame = requireActivity().intent.getBooleanExtra(SettingsActivity.KEY_IN_GAME, false)
         val rendererPreference = findPreference<InGameLockedListPreference>("video_renderer")!!

@@ -1189,4 +1189,20 @@
     <string name="dsi_profile_make_default">Set as default</string>
     <string name="dsi_profile_missing">Profile unavailable</string>
     <string name="dsi_profile_remove_description">Remove this profile from settings? Its files will remain. Games assigned to it will need another profile before they can start.</string>
+
+    <!-- vkBasalt / ReShade -->
+    <string name="video_vkbasalt_category">vkBasalt / ReShade</string>
+    <string name="video_vkbasalt_enabled">Enable vkBasalt</string>
+    <string name="video_vkbasalt_enabled_summary">Applies the real vkBasalt Vulkan layer (ReShade .fx shaders, CAS, SMAA, FXAA…). Vulkan renderer only. Takes effect the next time a game starts.</string>
+    <string name="video_vkbasalt_import">Import shader pack (.zip)</string>
+    <string name="video_vkbasalt_import_summary">Select a ReShade shaders or vkBasalt .zip</string>
+    <string name="video_vkbasalt_import_summary_installed">A pack is installed. Select another .zip to replace it</string>
+    <string name="video_vkbasalt_importing">Importing shader pack…</string>
+    <string name="video_vkbasalt_import_success">Imported %1$d effects</string>
+    <string name="video_vkbasalt_import_failed">Import failed: %1$s</string>
+    <string name="video_vkbasalt_effects_title">Effects</string>
+    <string name="video_vkbasalt_effects_summary_none">None selected. A vkBasalt.conf inside the pack is used when nothing is selected</string>
+    <string name="video_vkbasalt_remove">Remove shader pack</string>
+    <string name="video_vkbasalt_remove_summary">Deletes the imported pack and the effect selection</string>
+    <string name="video_vkbasalt_pack_removed">Shader pack removed</string>
 </resources>

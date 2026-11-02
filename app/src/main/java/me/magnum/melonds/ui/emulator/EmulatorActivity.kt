@@ -73,6 +73,7 @@ import kotlinx.coroutines.withTimeoutOrNull
 import me.magnum.melonds.MelonEmulator
 import me.magnum.melonds.R
 import me.magnum.melonds.common.PermissionHandler
+import me.magnum.melonds.common.vkbasalt.VkBasaltManager
 import me.magnum.melonds.databinding.ActivityEmulatorBinding
 import me.magnum.melonds.domain.model.ConsoleType
 import me.magnum.melonds.domain.model.ControllerConfiguration
@@ -521,6 +522,8 @@ class EmulatorActivity : AppCompatActivity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        // Must run before the Vulkan context is created: enables the vkBasalt layer and writes its config
+        VkBasaltManager(applicationContext).applyForEmulation()
         handler = Handler(mainLooper)
         externalDisplayMode = settingsRepository.getExternalDisplayMode()
         lifecycleOwnerProvider.setCurrentLifecycleOwner(this)

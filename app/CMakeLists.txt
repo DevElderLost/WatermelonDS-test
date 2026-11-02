@@ -149,6 +149,9 @@ target_include_directories(enet INTERFACE "${ANDROID_CPP_DIR}/enet/include")
 list(APPEND CMAKE_MODULE_PATH "${CORE_LIB_DIR}/cmake")
 add_subdirectory("${CORE_LIB_DIR}/src/net" ./net-utils)
 
+# Real vkBasalt packaged as an Android Vulkan layer (libVkLayer_vkBasalt.so), see vkbasalt_layer/CMakeLists.txt
+add_subdirectory("${ANDROID_CPP_DIR}/vkbasalt_layer" ./vkbasalt-layer)
+
 add_library(
         melonDS-android-frontend
 

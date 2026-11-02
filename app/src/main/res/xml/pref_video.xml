@@ -167,6 +167,40 @@
     </PreferenceCategory>
 
     <PreferenceCategory
+            android:key="video_vkbasalt_category"
+            android:title="@string/video_vkbasalt_category"
+            app:iconSpaceReserved="false">
+
+        <SwitchPreference
+                android:key="video_vkbasalt_enabled"
+                android:title="@string/video_vkbasalt_enabled"
+                android:summary="@string/video_vkbasalt_enabled_summary"
+                app:iconSpaceReserved="false"
+                android:defaultValue="false" />
+
+        <Preference
+                android:key="video_vkbasalt_import"
+                android:title="@string/video_vkbasalt_import"
+                android:summary="@string/video_vkbasalt_import_summary"
+                android:dependency="video_vkbasalt_enabled"
+                app:iconSpaceReserved="false" />
+
+        <Preference
+                android:key="video_vkbasalt_effects"
+                android:title="@string/video_vkbasalt_effects_title"
+                android:summary="@string/video_vkbasalt_effects_summary_none"
+                android:dependency="video_vkbasalt_enabled"
+                app:iconSpaceReserved="false" />
+
+        <Preference
+                android:key="video_vkbasalt_remove"
+                android:title="@string/video_vkbasalt_remove"
+                android:summary="@string/video_vkbasalt_remove_summary"
+                android:dependency="video_vkbasalt_enabled"
+                app:iconSpaceReserved="false" />
+    </PreferenceCategory>
+
+    <PreferenceCategory
             android:key="video_vulkan_driver_category"
             android:title="@string/video_vulkan_driver_category"
             app:iconSpaceReserved="false">
