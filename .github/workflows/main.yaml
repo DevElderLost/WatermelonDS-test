@@ -37,6 +37,25 @@ jobs:
         with:
           packages: 'platform-tools'
 
+      - name: Prepare signing keystore
+        env:
+          MELONDS_KEYSTORE: ${{ secrets.MELONDS_KEYSTORE }}
+          MELONDS_KEYSTORE_PASSWORD: ${{ secrets.MELONDS_KEYSTORE_PASSWORD }}
+        run: |
+          KS="${{ runner.workspace }}/keystore.jks"
+          if [ -n "$MELONDS_KEYSTORE" ] \
+             && echo "$MELONDS_KEYSTORE" | base64 -d > "$KS" 2>/dev/null \
+             && keytool -list -keystore "$KS" -storepass "$MELONDS_KEYSTORE_PASSWORD" -alias melonds > /dev/null 2>&1; then
+            echo "Using the keystore from the MELONDS_KEYSTORE secret"
+            echo "KS_PASS=$MELONDS_KEYSTORE_PASSWORD" >> "$GITHUB_ENV"
+          else
+            echo "::warning::MELONDS_KEYSTORE secret is missing or not a valid keystore. Generating a temporary one: every build is signed with a different key, so it cannot be installed over a previous build."
+            rm -f "$KS"
+            keytool -genkeypair -keystore "$KS" -storetype PKCS12 -alias melonds -keyalg RSA -keysize 2048 \
+              -validity 10000 -storepass melondsci -keypass melondsci -dname "CN=melonDS CI"
+            echo "KS_PASS=melondsci" >> "$GITHUB_ENV"
+          fi
+
       - name: Build melonDS Android
         env:
           MELONDS_KEYSTORE: ${{ secrets.MELONDS_KEYSTORE }}
@@ -47,11 +66,10 @@ jobs:
           git config user.name "${GITHUB_ACTOR}"
           git config user.email "${GITHUB_ACTOR}@users.noreply.github.com"
           sed -i -e 's/\(versionName = "\)\(.*\)\("\)/\1\2 ('"$COMMIT"')\3/g' buildSrc/src/main/kotlin/AppConfig.kt
-          echo "$MELONDS_KEYSTORE" | base64 -d > ${{runner.workspace}}/keystore.jks
           echo "MELONDS_KEYSTORE=${{runner.workspace}}/keystore.jks" >> local.properties
-          echo "MELONDS_KEYSTORE_PASSWORD=$MELONDS_KEYSTORE_PASSWORD" >> local.properties
+          echo "MELONDS_KEYSTORE_PASSWORD=$KS_PASS" >> local.properties
           echo "MELONDS_KEY_ALIAS=melonds" >> local.properties
-          echo "MELONDS_KEY_PASSWORD=$MELONDS_KEYSTORE_PASSWORD" >> local.properties
+          echo "MELONDS_KEY_PASSWORD=$KS_PASS" >> local.properties
           chmod +x ./gradlew
           ./gradlew :app:regenerateVulkanSpirv :app:assembleGitHubNightlyRelease
           git tag -m "Nightly Release" -f -a nightly-release
